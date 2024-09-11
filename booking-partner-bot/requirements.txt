@@ -4,3 +4,4 @@ chainlit
 langchain-community
 langchain-ollama
 fastapi
+pypdf
