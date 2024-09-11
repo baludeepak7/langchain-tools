@@ -4,17 +4,39 @@ from langchain_core.prompts import PromptTemplate,ChatPromptTemplate
 import json
 from template import PROMPT_TEMPLATE
 from langchain.agents import create_tool_calling_agent,AgentExecutor
+from langchain.tools.retriever import create_retriever_tool
 import requests
 import re
 import chainlit as cl
 from pydantic import BaseModel
 from typing import List
+from langchain_ollama import OllamaEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_community.document_loaders import PyPDFLoader
 
 llm = ChatOllama(model="llama3.1",temperature=0)
-
+embeddings = OllamaEmbeddings(
+    model="llama3.1",
+)
 headers = {
     'Content-Type': 'application/json'
 }
+file_path = ("lic.pdf")
+loader = PyPDFLoader(file_path)
+pages = loader.load_and_split()
+vectorstore = InMemoryVectorStore.from_documents(
+    pages,
+    embedding=embeddings,
+)
+retriever = vectorstore.as_retriever()
+
+
+LicPolicySearch = create_retriever_tool(
+    retriever,
+    "lic_policy_search",
+    "Use this tool to search for information about the lic policy and any other related information.",
+)
+
 
 
 class BookingPartner(BaseModel):
@@ -94,7 +116,7 @@ def gatAllPartnerProfiles() -> List[BookingPartner]:
       print('Failed:', response.status_code, response.text)
       return []
  
-tools = [updatePartnerProfile]
+tools = [updatePartnerProfile,LicPolicySearch]
 
 prompt = ChatPromptTemplate.from_messages(
     [
