@@ -1,0 +1,74 @@
+using System.Text.Json;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using OpenAI;
+using OpenAI.Chat;
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+    ?? throw new InvalidOperationException("Set OPENAI_API_KEY.");
+
+var model = Environment.GetEnvironmentVariable("OPENAI_CHAT_MODEL") ?? "gpt-4o-mini";
+
+var historyProvider = new InMemoryChatHistoryProvider();
+
+AIAgent agent = new OpenAIClient(apiKey)
+    .GetChatClient(model)
+    .AsAIAgent(new ChatClientAgentOptions
+    {
+        Name = "MemoryDemoAgent",
+        ChatOptions = new ChatOptions
+        {
+            Instructions = "You are a concise assistant. Use prior chat history when answering."
+        },
+        ChatHistoryProvider = historyProvider
+    });
+
+AgentSession session = await agent.CreateSessionAsync();
+
+const string userName = "Avery";
+const string preference = "brief answers with one concrete example";
+
+session.StateBag.SetValue("userName", userName);
+session.StateBag.SetValue("preference", preference);
+
+Console.WriteLine("FIRST TURN");
+var first = await agent.RunAsync(
+    $"My name is {userName}, and I prefer {preference}. Please acknowledge this in one sentence.",
+    session);
+Console.WriteLine(first.Text);
+
+Console.WriteLine();
+Console.WriteLine("SECOND TURN");
+var second = await agent.RunAsync(
+    "What is my name, and how do I prefer you to answer?",
+    session);
+Console.WriteLine(second.Text);
+
+Console.WriteLine();
+Console.WriteLine("CHAT HISTORY FROM InMemoryChatHistoryProvider");
+List<ChatMessage> messages = historyProvider.GetMessages(session) ?? [];
+foreach (var message in messages)
+{
+    Console.WriteLine($"- {message.Role}: {message.Text}");
+}
+
+Console.WriteLine();
+Console.WriteLine("SESSION STATE");
+Console.WriteLine($"userName: {session.StateBag.GetValue<string>("userName")}");
+Console.WriteLine($"preference: {session.StateBag.GetValue<string>("preference")}");
+
+Console.WriteLine();
+Console.WriteLine("SERIALIZE / DESERIALIZE SESSION");
+JsonElement serialized = await agent.SerializeSessionAsync(session);
+Console.WriteLine(JsonSerializer.Serialize(serialized, new JsonSerializerOptions { WriteIndented = true }));
+
+AgentSession restoredSession = await agent.DeserializeSessionAsync(serialized);
+Console.WriteLine();
+Console.WriteLine("RESTORED SESSION STATE");
+Console.WriteLine($"userName: {restoredSession.StateBag.GetValue<string>("userName")}");
+Console.WriteLine($"preference: {restoredSession.StateBag.GetValue<string>("preference")}");
+List<ChatMessage> restoredMessages = historyProvider.GetMessages(restoredSession) ?? [];
+Console.WriteLine($"restored history messages: {restoredMessages.Count}");
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.1.0" />
+  </ItemGroup>
